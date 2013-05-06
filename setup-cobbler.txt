@@ -1,0 +1,38 @@
+
+
+1. Install cobbler server
+yum install cobbler -y
+
+2. Change the listening address of cobber server in /etc/cobbler/settings.
+   The ip address is what is assigned to the virtual interface acting as a
+   gateway for the virtual network.
+server: 192.168.247.1
+next-server 192.168.247.1
+
+3. Import Fedora 18 distro 
+mount -o loop Fedora-18-x86_64-DVD.iso /mnt 
+cobbler import --path=/mnt --name=fedora18 --arch=x86_64
+cobbler distro edit --name=fedora18-x86_64 --kopts=""
+
+4. Add repos for oVirt VMs
+cobbler repo add --name=ovirt-3.2 --mirror=http://resources.ovirt.org/releases/3.2/rpm/Fedora/18/
+cobbler repo add --name=glusterfs --mirror=http://download.gluster.org/pub/gluster/glusterfs/qa-releases/3.4.0alpha/Fedora/fedora-18/x86_64/
+cobbler repo add --name=fedora18-everything --mirror=http://mirrors.163.com/fedora/releases/18/Everything/x86_64/os  --mirror-locally=N
+cobbler repo add --name=fedora18-updates --mirror=http://mirrors.163.com/fedora/updates/18/x86_64/ --mirror-locally=N
+cobbler reposync
+
+5. Add profiles for oVirt VMs
+cobbler profile add --name=fedora18-engine --distro=fedora18-x86_64 --virt-ram=2048 --virt-type=qemu --virt-file-size=20 --virt-cpus=2 --virt-path=/var/lib/libvirt/images/ --virt-disk-driver=qcow2 --virt-bridge=virbr-ovirt --repos="ovirt-3.2 fedora18-everything fedora18-updates" --kickstart=/var/lib/cobbler/kickstarts/engine.ks
+cobbler profile add --name=fedora18-vdsm --distro=fedora18-x86_64 --virt-ram=2048 --virt-type=qemu --virt-file-size=20 --virt-cpus=2 --virt-path=/var/lib/libvirt/images/ --virt-disk-driver=qcow2 --virt-bridge=virbr-ovirt --repos="ovirt-3.2 fedora18-everything fedora18-updates glusterfs" --kickstart=/var/lib/cobbler/kickstarts/vdsm.ks
+cobbler profile add --name=fedora18-storage --distro=fedora18-x86_64 --virt-ram=2048 --virt-type=qemu --virt-file-size=100 --virt-cpus=2 --virt-path=/var/lib/libvirt/images/ --virt-disk-driver=qcow2 --virt-bridge=virbr-ovirt --repos="fedora18-everything" --kickstart=/var/lib/cobbler/kickstarts/storage.ks
+
+allow access http iptables
+
+6. Test: create a vm via koan
+koan --server 192.168.247.1 --virt --profile=fedora18-engine --virt-type=kvm --qemu-disk-type=virtio
+It the installer in guest fails to fetch the kickstart file, please check if the http port is allowed
+by the host firewall.
+
+You could also create a VM with a given mac address by adding a system to cobbler:
+cobbler system add --name=fedora18-storage1 --mac=52:54:00:b7:2b:72 --profile=fedora18-storage
+koan --server 192.168.247.1 --virt --system=fedora18-storage1 --virt-type=kvm --qemu-disk-type=virtio --virt-name=ovirt-storage
